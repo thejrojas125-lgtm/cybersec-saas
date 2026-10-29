@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set active_page = 'escaneos' %}
+{% block title %}Escaneos · Cybersec SaaS{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Escaneos</h1>
+    <p>Historial de los últimos 100 escaneos.</p>
+  </div>
+</div>
+{% if rows %}
+<div class="card flush">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Historial de escaneos">
+    <table class="data-table">
+      <thead><tr><th scope="col">Fecha</th><th scope="col">Objetivo</th><th scope="col">Estado</th><th scope="col">Hallazgos abiertos</th><th scope="col"><span class="sr-only">Acciones</span></th></tr></thead>
+      <tbody>
+        {% for r in rows %}
+        <tr>
+          <td data-label="Fecha">{{ r.scan.started_at | fecha }}</td>
+          <th scope="row">{{ r.target.name }}<span class="url">{{ r.target.url }}</span></th>
+          <td data-label="Estado">{{ r.scan.status | estado_escaneo }}</td>
+          <td data-label="Hallazgos abiertos">
+            {% if r.counts.total == 0 %}Ninguno{% else %}<span class="sev-group">{% for sev in ('critical', 'high', 'medium', 'low') %}{% if r.counts[sev] %}<span class="sev sev-{{ sev }}">{{ r.counts[sev] }} {{ sev | severidad(r.counts[sev]) }}</span>{% endif %}{% endfor %}</span>{% endif %}
+          </td>
+          <td data-label="Detalle" class="num"><a href="/targets/{{ r.target.id }}/view">Ver objetivo<span class="sr-only">: {{ r.target.name }}</span></a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card empty">
+  <h2>Todavía no hay escaneos</h2>
+  <p>Abre un objetivo y pulsa «Ejecutar escaneo» para obtener el primer informe.</p>
+  <p><a href="/objetivos">Ir a Objetivos</a></p>
+</div>
+{% endif %}
+{% endblock %}

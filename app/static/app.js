@@ -31,3 +31,59 @@ document.addEventListener("click", function (event) {
   var dialog = event.target;
   if (dialog instanceof HTMLDialogElement && dialog.open) dialog.close();
 });
+
+// 4) Menú lateral (botón ☰): en escritorio se oculta/muestra y se recuerda; en móvil es un panel superpuesto.
+(function () {
+  var app = document.getElementById("app");
+  var button = document.getElementById("menu-btn");
+  if (!app || !button) return;
+  var desktop = window.matchMedia("(min-width: 56rem)");
+
+  function isOpen() {
+    var state = app.getAttribute("data-nav");
+    return desktop.matches ? state !== "closed" : state === "open";
+  }
+  function render() {
+    button.setAttribute("aria-expanded", isOpen() ? "true" : "false");
+  }
+  function setNav(open) {
+    app.setAttribute("data-nav", open ? "open" : "closed");
+    if (desktop.matches) {
+      try { localStorage.setItem("nav", open ? "open" : "closed"); } catch (e) { /* sin almacenamiento */ }
+    }
+    render();
+  }
+  function applySaved() {
+    if (!desktop.matches) return;
+    try {
+      if (localStorage.getItem("nav") === "closed") app.setAttribute("data-nav", "closed");
+    } catch (e) { /* sin almacenamiento */ }
+  }
+
+  button.addEventListener("click", function () { setNav(!isOpen()); });
+  document.addEventListener("click", function (event) {
+    if (event.target.closest("[data-nav-close]") || (!desktop.matches && event.target.closest(".sidebar a"))) {
+      setNav(false);
+    }
+  });
+  document.addEventListener("keydown", function (event) {
+    if (event.key === "Escape" && !desktop.matches && isOpen()) {
+      setNav(false);
+      button.focus();
+    }
+  });
+  desktop.addEventListener("change", function () {
+    app.removeAttribute("data-nav");
+    applySaved();
+    render();
+  });
+  applySaved();
+  render();
+})();
+
+// 5) Cerrar el menú de usuario al hacer clic fuera
+document.addEventListener("click", function (event) {
+  document.querySelectorAll("details.usermenu[open]").forEach(function (menu) {
+    if (!menu.contains(event.target)) menu.removeAttribute("open");
+  });
+});

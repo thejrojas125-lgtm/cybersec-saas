@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set active_page = 'cuenta' %}
+{% block title %}Mi cuenta · Cybersec SaaS{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Mi cuenta</h1>
+    <p>Datos de acceso y seguridad de tu cuenta.</p>
+  </div>
+</div>
+
+<div class="grid-2">
+  <section class="card" aria-labelledby="datos-title">
+    <h2 id="datos-title">Datos de la cuenta</h2>
+    <dl class="details">
+      <div><dt>Correo electrónico</dt><dd>{{ user.email }}</dd></div>
+      <div><dt>Rol</dt><dd>{{ 'Administrador' if user.is_admin else 'Cliente' }}</dd></div>
+      <div><dt>Estado</dt><dd>{{ 'Activa' if user.is_active else 'Desactivada' }}</dd></div>
+    </dl>
+  </section>
+
+  <section class="card" aria-labelledby="pass-title">
+    <h2 id="pass-title">Cambiar contraseña</h2>
+    <form method="post" action="/cuenta/password" class="stack">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+      <div class="field">
+        <label for="pw-current">Contraseña actual</label>
+        <input id="pw-current" name="current_password" type="password" class="input" required autocomplete="current-password">
+      </div>
+      <div class="field">
+        <label for="pw-new">Contraseña nueva</label>
+        <input id="pw-new" name="new_password" type="password" class="input" required minlength="10" autocomplete="new-password" aria-describedby="pw-hint">
+        <span id="pw-hint" class="hint">Mínimo 10 caracteres, con mayúscula, minúscula y número.</span>
+      </div>
+      <div class="field">
+        <label for="pw-confirm">Repite la contraseña nueva</label>
+        <input id="pw-confirm" name="confirm_password" type="password" class="input" required minlength="10" autocomplete="new-password">
+      </div>
+      <div><button type="submit" class="btn btn-primary">Guardar contraseña</button></div>
+    </form>
+  </section>
+</div>
+{% endblock %}

@@ -1,3 +1,4 @@
+{% from "components/icons.html" import icon %}
 <!DOCTYPE html>
 <html lang="es">
 <head>
@@ -11,30 +12,55 @@
 <body>
   <a class="skip-link" href="#contenido">Saltar al contenido</a>
   {% if user %}
-  <div class="shell">
-    <header class="rail">
+  <div class="app" id="app">
+    <aside class="sidebar" id="sidebar" aria-label="Navegación principal">
       <a class="brand" href="/">Cybersec</a>
-      <nav class="rail-nav" aria-label="Principal">
-        <a href="/"{% if active_page == 'objetivos' %} aria-current="page"{% endif %}>Objetivos</a>
-        {% if user.is_admin %}<a href="/admin"{% if active_page == 'admin' %} aria-current="page"{% endif %}>Administración</a>{% endif %}
+      <nav>
+        <p class="nav-label">General</p>
+        <ul class="nav-list">
+          <li><a href="/"{% if active_page == 'panel' %} aria-current="page"{% endif %}>{{ icon('panel') }}Panel</a></li>
+          <li><a href="/objetivos"{% if active_page == 'objetivos' %} aria-current="page"{% endif %}>{{ icon('objetivos') }}Objetivos</a></li>
+          <li><a href="/hallazgos"{% if active_page == 'hallazgos' %} aria-current="page"{% endif %}>{{ icon('hallazgos') }}Hallazgos</a></li>
+          <li><a href="/escaneos"{% if active_page == 'escaneos' %} aria-current="page"{% endif %}>{{ icon('escaneos') }}Escaneos</a></li>
+          <li><a href="/informes"{% if active_page == 'informes' %} aria-current="page"{% endif %}>{{ icon('informes') }}Informes</a></li>
+        </ul>
+        <p class="nav-label">Cuenta</p>
+        <ul class="nav-list">
+          <li><a href="/cuenta"{% if active_page == 'cuenta' %} aria-current="page"{% endif %}>{{ icon('cuenta') }}Mi cuenta</a></li>
+          {% if user.is_admin %}<li><a href="/admin"{% if active_page == 'admin' %} aria-current="page"{% endif %}>{{ icon('admin') }}Administración</a></li>{% endif %}
+        </ul>
       </nav>
-      <div class="account">
-        <span class="account-name">{{ user.email }}</span>
-        <span>{{ 'Administrador' if user.is_admin else 'Cliente' }}</span>
-        <form method="post" action="/logout">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
-          <button type="submit" class="btn btn-quiet">Cerrar sesión</button>
-        </form>
-      </div>
-    </header>
+    </aside>
+    <div class="scrim" data-nav-close></div>
+    <div class="content">
+      <header class="appbar">
+        <button type="button" class="menu-btn" id="menu-btn" aria-controls="sidebar" aria-expanded="true" aria-label="Mostrar u ocultar el menú">{{ icon('menu') }}</button>
+        <span class="appbar-brand">Cybersec</span>
+        <details class="usermenu">
+          <summary><span class="avatar" aria-hidden="true">{{ user.email[:1] | upper }}</span><span class="who">{{ user.email }}</span></summary>
+          <div class="usermenu-panel">
+            <p class="small muted">{{ 'Administrador' if user.is_admin else 'Cliente' }}</p>
+            <a href="/cuenta">Mi cuenta</a>
+            <form method="post" action="/logout">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token or '' }}">
+              <button type="submit" class="btn btn-quiet">Cerrar sesión</button>
+            </form>
+          </div>
+        </details>
+      </header>
   {% else %}
   <div class="guest">
-    <header class="guest-bar"><a class="brand" href="/">Cybersec</a></header>
+    <header class="guest-bar"><a class="brand brand-dark" href="/">Cybersec</a></header>
   {% endif %}
-    <main id="contenido" class="{{ 'main' if user else 'guest-main' }}">
-      {% include "components/flash.html" %}
-      {% block content %}{% endblock %}
-    </main>
+      <main id="contenido" class="{{ 'main' if user else 'guest-main' }}">
+        {% include "components/flash.html" %}
+        {% block content %}{% endblock %}
+      </main>
+  {% if user %}
+    </div>
   </div>
+  {% else %}
+  </div>
+  {% endif %}
 </body>
 </html>

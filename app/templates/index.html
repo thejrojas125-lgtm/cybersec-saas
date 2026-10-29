@@ -1,63 +1,17 @@
 {% extends "base.html" %}
-{% set active_page = 'objetivos' %}
-{% block title %}Objetivos · Cybersec SaaS{% endblock %}
+{% set active_page = 'panel' %}
+{% block title %}Panel · Cybersec SaaS{% endblock %}
 {% block content %}
 <div class="page-head">
   <div>
-    <h1>Objetivos</h1>
+    <h1>Panel</h1>
+    <p>Resumen del estado de seguridad de tus sitios web.</p>
   </div>
+  <div class="actions"><a class="btn" href="/objetivos">Ver objetivos</a></div>
 </div>
 
-{% if targets %}
-<p class="lede">
-  {{ stats.total_targets }} {{ 'objetivo monitoreado' if stats.total_targets == 1 else 'objetivos monitoreados' }}.
-  {% if stats.critical_findings %}
-    {{ stats.critical_findings }} {{ 'hallazgo crítico abierto' if stats.critical_findings == 1 else 'hallazgos críticos abiertos' }}:
-    empieza por <a href="/targets/{{ stats.worst.id }}/view">{{ stats.worst.name }}</a>.
-  {% else %}
-    No hay hallazgos críticos abiertos.
-  {% endif %}
-  {% if stats.last_scan %}Último escaneo: {{ stats.last_scan | fecha }}.{% else %}Todavía no se ha ejecutado ningún escaneo.{% endif %}
-</p>
-
-<div class="table-wrap" tabindex="0" role="region" aria-labelledby="tabla-objetivos">
-  <table class="data-table">
-    <caption id="tabla-objetivos" class="sr-only">Objetivos y hallazgos abiertos del último escaneo</caption>
-    <thead>
-      <tr>
-        <th scope="col">Objetivo</th>
-        <th scope="col">Último escaneo</th>
-        <th scope="col">Hallazgos abiertos</th>
-        <th scope="col"><span class="sr-only">Acciones</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for t in targets %}
-      {% set info = summaries[t.id] %}
-      <tr>
-        <th scope="row">{{ t.name }}<span class="url">{{ t.url }}</span></th>
-        <td data-label="Último escaneo">
-          {% if info.scan %}{{ info.scan.status | estado_escaneo }}, {{ info.scan.started_at | fecha }}{% else %}Sin escanear{% endif %}
-        </td>
-        <td data-label="Hallazgos abiertos">
-          {% if not info.scan %}
-            <span class="muted">Sin datos</span>
-          {% elif info.total == 0 %}
-            Ninguno
-          {% else %}
-            <span class="sev-group">
-              {% for sev in ('critical', 'high', 'medium', 'low') %}{% if info.counts[sev] %}<span class="sev sev-{{ sev }}">{{ info.counts[sev] }} {{ sev | severidad(info.counts[sev]) }}</span>{% endif %}{% endfor %}
-            </span>
-          {% endif %}
-        </td>
-        <td data-label="Detalle" class="num"><a href="/targets/{{ t.id }}/view">Ver detalle<span class="sr-only"> de {{ t.name }}</span></a></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% else %}
-<div class="empty">
+{% if not targets %}
+<div class="card empty">
   <h2>Todavía no hay objetivos</h2>
   {% if user.is_admin %}
   <p>Registra el primer sitio que quieras monitorear desde <a href="/admin">Administración</a>.</p>
@@ -65,5 +19,70 @@
   <p>Cuando el administrador de tu cuenta registre tus sitios web, aparecerán aquí con sus hallazgos.</p>
   {% endif %}
 </div>
+{% else %}
+<dl class="kpis">
+  <div class="kpi"><dt>Objetivos</dt><dd>{{ stats.total_targets }}</dd><dd class="kpi-note">monitoreados</dd></div>
+  <div class="kpi{% if totals.critical %} kpi-critical{% endif %}"><dt>Críticos abiertos</dt><dd>{{ totals.critical }}</dd><dd class="kpi-note">{{ 'requieren atención' if totals.critical else 'ninguno por ahora' }}</dd></div>
+  <div class="kpi"><dt>Hallazgos abiertos</dt><dd>{{ totals.total }}</dd><dd class="kpi-note">en el último escaneo de cada sitio</dd></div>
+  <div class="kpi"><dt>Último escaneo</dt><dd class="kpi-date">{{ stats.last_scan | fecha if stats.last_scan else 'Sin datos' }}</dd></div>
+</dl>
+
+<div class="grid-2">
+  <section class="card" aria-labelledby="sev-title">
+    <div class="card-head"><h2 id="sev-title">Hallazgos por severidad</h2><a href="/hallazgos">Ver todos</a></div>
+    {% if bar %}
+    <svg class="bar" viewBox="0 0 100 8" preserveAspectRatio="none" role="img" aria-label="Distribución de hallazgos abiertos por severidad">
+      {% for seg in bar %}<rect class="seg-{{ seg.sev }}" x="{{ seg.x }}" y="0" width="{{ seg.w }}" height="8"/>{% endfor %}
+    </svg>
+    <ul class="legend">
+      {% for sev in ('critical', 'high', 'medium', 'low') %}
+      <li><span class="sev sev-{{ sev }}">{{ sev | severidad(2) | capitalize }}</span><span class="legend-n">{{ totals[sev] }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">No hay hallazgos abiertos.</p>
+    {% endif %}
+  </section>
+
+  <section class="card" aria-labelledby="att-title">
+    <div class="card-head"><h2 id="att-title">Requieren atención</h2><a href="/objetivos">Ver objetivos</a></div>
+    {% if attention %}
+    <ul class="rows">
+      {% for t in attention %}
+      {% set info = summaries[t.id] %}
+      <li>
+        <div><a class="row-title" href="/targets/{{ t.id }}/view">{{ t.name }}</a><span class="sub">{{ t.url }}</span></div>
+        <span class="sev-group">{% for sev in ('critical', 'high', 'medium', 'low') %}{% if info.counts[sev] %}<span class="sev sev-{{ sev }}">{{ info.counts[sev] }} {{ sev | severidad(info.counts[sev]) }}</span>{% endif %}{% endfor %}</span>
+      </li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="muted">Ningún sitio tiene hallazgos abiertos.</p>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card" aria-labelledby="rec-title">
+  <div class="card-head"><h2 id="rec-title">Escaneos recientes</h2><a href="/escaneos">Ver historial</a></div>
+  {% if recent %}
+  <div class="table-wrap" tabindex="0" role="region" aria-labelledby="rec-title">
+    <table class="data-table">
+      <thead><tr><th scope="col">Fecha</th><th scope="col">Objetivo</th><th scope="col">Estado</th><th scope="col">Hallazgos abiertos</th></tr></thead>
+      <tbody>
+        {% for r in recent %}
+        <tr>
+          <td data-label="Fecha">{{ r.scan.started_at | fecha }}</td>
+          <th scope="row"><a href="/targets/{{ r.target.id }}/view">{{ r.target.name }}</a></th>
+          <td data-label="Estado">{{ r.scan.status | estado_escaneo }}</td>
+          <td data-label="Hallazgos abiertos">{{ r.counts.total if r.counts.total else 'Ninguno' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="muted">Todavía no se ha ejecutado ningún escaneo. Abre un objetivo y pulsa «Ejecutar escaneo».</p>
+  {% endif %}
+</section>
 {% endif %}
 {% endblock %}

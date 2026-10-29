@@ -1,8 +1,6 @@
 import os
 import time
 import uuid
-from datetime import UTC
-from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, Form, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -14,6 +12,7 @@ from sqlalchemy.orm import Session
 from starlette.middleware.sessions import SessionMiddleware
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 
+from app import ui
 from app.api import routes
 from app.api.deps import DbSession, get_current_user_html, require_auth_html
 from app.core import config
@@ -141,66 +140,7 @@ if _admin_email and _admin_password:
 templates = Jinja2Templates(directory="app/templates")
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
 
-# ---- Filtros de presentación (todo el texto visible está en español) ----
-_SEVERIDAD = {
-    "critical": ("crítico", "críticos"),
-    "high": ("alto", "altos"),
-    "medium": ("medio", "medios"),
-    "low": ("bajo", "bajos"),
-}
-_ORDEN_SEVERIDAD = {"critical": 0, "high": 1, "medium": 2, "low": 3}
-_ESTADOS_ESCANEO = {"pending": "En cola", "running": "En curso", "done": "Finalizado", "failed": "Fallido"}
-_MESES = ("ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic")
-
-
-def _display_tz():
-    try:
-        return ZoneInfo(config.DISPLAY_TIMEZONE)
-    except Exception:  # noqa: BLE001 - zona inválida o sin tzdata: se muestra en UTC
-        return UTC
-
-
-def filtro_fecha(value) -> str:
-    if not value:
-        return "—"
-    if value.tzinfo is None:
-        value = value.replace(tzinfo=UTC)
-    local = value.astimezone(_display_tz())
-    return f"{local.day} {_MESES[local.month - 1]} {local.year}, {local:%H:%M}"
-
-
-def filtro_severidad(value: str, count: int = 1) -> str:
-    singular, plural = _SEVERIDAD.get(value, (value, value))
-    return singular if count == 1 else plural
-
-
-def filtro_estado_escaneo(value: str) -> str:
-    return _ESTADOS_ESCANEO.get(value, value)
-
-
-def filtro_por_severidad(findings):
-    return sorted(findings, key=lambda f: (_ORDEN_SEVERIDAD.get(f.severity, 9), f.id))
-
-
-def filtro_conteo_abiertos(findings) -> dict:
-    """Hallazgos abiertos (ni resueltos ni falsos positivos) por severidad."""
-    counts = {"critical": 0, "high": 0, "medium": 0, "low": 0, "total": 0}
-    for f in findings:
-        if f.status in ("resolved", "false_positive"):
-            continue
-        if f.severity in counts:
-            counts[f.severity] += 1
-        counts["total"] += 1
-    return counts
-
-
-templates.env.filters.update(
-    fecha=filtro_fecha,
-    severidad=filtro_severidad,
-    estado_escaneo=filtro_estado_escaneo,
-    por_severidad=filtro_por_severidad,
-    conteo_abiertos=filtro_conteo_abiertos,
-)
+ui.register_filters(templates.env)
 
 
 def error_page(request: Request, status_code: int, title: str, message: str):
@@ -309,45 +249,151 @@ def logout(request: Request, csrf_token: str = Form(...)):
 
 # ---- HTML: cliente panel ----
 
+def _page_context(request: Request, db, severity: str | None = None):
+    """Usuario autenticado, objetivos visibles y datos de resumen. Devuelve (user, redirect, ctx)."""
+    user = get_current_user_html(request)
+    redirect = require_auth_html(request, user)
+    if redirect:
+        return None, redirect, None
+    query = db.query(Target)
+    if not user.is_admin:
+        query = query.filter(Target.owner_id == user.id)
+    targets = query.all()
+    summaries, last_scan = ui.target_summaries(targets)
+    ordered = ui.sorted_by_risk(targets, summaries)
+    totals = ui.severity_totals(summaries)
+    ctx = common_context(request)
+    ctx.update(
+        {
+            "user": user,
+            "targets": ordered,
+            "summaries": summaries,
+            "totals": totals,
+            "stats": {
+                "total_targets": len(ordered),
+                "critical_findings": totals["critical"],
+                "last_scan": last_scan,
+                "worst": ordered[0] if totals["critical"] else None,
+            },
+        }
+    )
+    return user, None, ctx
+
+
 @app.get("/", response_class=HTMLResponse)
 def dashboard(request: Request, db: DbSession):
+    _, redirect, ctx = _page_context(request, db)
+    if redirect:
+        return redirect
+    ctx.update(
+        {
+            "bar": ui.stacked_bar(ctx["totals"]),
+            "attention": [t for t in ctx["targets"] if ctx["summaries"][t.id]["total"]][:5],
+            "recent": ui.recent_scans(ctx["targets"], 5),
+        }
+    )
+    return templates.TemplateResponse("index.html", ctx)
+
+
+@app.get("/objetivos", response_class=HTMLResponse)
+def targets_page(request: Request, db: DbSession):
+    _, redirect, ctx = _page_context(request, db)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse("objetivos.html", ctx)
+
+
+@app.get("/hallazgos", response_class=HTMLResponse)
+def findings_page(request: Request, db: DbSession, severidad: str = ""):
+    _, redirect, ctx = _page_context(request, db)
+    if redirect:
+        return redirect
+    selected = severidad if severidad in ui.SEVERITIES else ""
+    ctx.update(
+        {
+            "items": ui.open_findings(ctx["targets"], ctx["summaries"], selected or None),
+            "selected": selected,
+        }
+    )
+    return templates.TemplateResponse("hallazgos.html", ctx)
+
+
+@app.get("/escaneos", response_class=HTMLResponse)
+def scans_page(request: Request, db: DbSession):
+    _, redirect, ctx = _page_context(request, db)
+    if redirect:
+        return redirect
+    ctx["rows"] = ui.recent_scans(ctx["targets"], 100)
+    return templates.TemplateResponse("escaneos.html", ctx)
+
+
+@app.get("/informes", response_class=HTMLResponse)
+def reports_page(request: Request, db: DbSession):
+    _, redirect, ctx = _page_context(request, db)
+    if redirect:
+        return redirect
+    return templates.TemplateResponse("informes.html", ctx)
+
+
+@app.get("/cuenta", response_class=HTMLResponse)
+def account_page(request: Request, db: DbSession):
+    user = get_current_user_html(request)
+    redirect = require_auth_html(request, user)
+    if redirect:
+        return redirect
+    ctx = common_context(request)
+    ctx["user"] = user
+    return templates.TemplateResponse("cuenta.html", ctx)
+
+
+@app.post("/cuenta/password", response_class=HTMLResponse)
+def change_password(
+    request: Request,
+    current_password: str = Form(...),
+    new_password: str = Form(...),
+    confirm_password: str = Form(...),
+    csrf_token: str = Form(...),
+    db: DbSession = None,
+):
+    if not validate_csrf_token(request, csrf_token):
+        return RedirectResponse(url="/cuenta", status_code=302)
     user = get_current_user_html(request)
     redirect = require_auth_html(request, user)
     if redirect:
         return redirect
 
-    query = db.query(Target)
-    if not user.is_admin:
-        query = query.filter(Target.owner_id == user.id)
-    targets = query.all()
+    limiter_key = f"pwchange:{user.id}"
+    check_rate_limit(limiter_key)
+    back = RedirectResponse(url="/cuenta", status_code=302)
+    if not verify_password(current_password, user.password_hash, user.password_salt):
+        record_failed_attempt(limiter_key)
+        flash(request, "error", "La contraseña actual no es correcta.")
+        return back
+    if new_password != confirm_password:
+        flash(request, "error", "La confirmación no coincide con la nueva contraseña.")
+        return back
+    try:
+        validate_password_strength(new_password)
+    except WeakPasswordError as exc:
+        flash(request, "error", str(exc))
+        return back
 
-    # Resumen por objetivo: último escaneo y hallazgos abiertos por severidad
-    summaries = {}
-    last_scan = None
-    for t in targets:
-        scans = sorted(t.scans, key=lambda s: s.id)
-        scan = scans[-1] if scans else None
-        counts = filtro_conteo_abiertos(scan.findings) if scan else filtro_conteo_abiertos([])
-        summaries[t.id] = {"scan": scan, "counts": counts, "total": counts["total"]}
-        for s_ in scans:
-            if s_.started_at and (not last_scan or s_.started_at > last_scan):
-                last_scan = s_.started_at
-    # Primero los objetivos con más hallazgos críticos y altos
-    targets = sorted(
-        targets,
-        key=lambda t: (-summaries[t.id]["counts"]["critical"], -summaries[t.id]["counts"]["high"], t.name.lower()),
+    # El usuario de la sesión viene de otra conexión: se vuelve a cargar en la sesión de esta petición.
+    db_user = db.get(User, user.id)
+    db_user.password_hash, db_user.password_salt = hash_password(new_password)
+    db.commit()
+    reset_attempts(limiter_key)
+    record_audit(
+        db,
+        action="password_changed",
+        user_id=user.id,
+        target_type="user",
+        target_id=user.id,
+        ip=request.client.host if request.client else None,
     )
-    critical_findings = sum(summaries[t.id]["counts"]["critical"] for t in targets)
-    stats = {
-        "total_targets": len(targets),
-        "critical_findings": critical_findings,
-        "last_scan": last_scan,
-        "worst": targets[0] if critical_findings else None,
-    }
-
-    ctx = common_context(request)
-    ctx.update({"targets": targets, "user": user, "stats": stats, "summaries": summaries})
-    return templates.TemplateResponse("index.html", ctx)
+    logger.info("password_cambiada", extra={"user_id": user.id})
+    flash(request, "success", "Contraseña actualizada.")
+    return back
 
 
 @app.get("/targets/{target_id}/view", response_class=HTMLResponse)
@@ -495,7 +541,7 @@ def admin_dashboard(request: Request, db: DbSession):
     for t in targets:
         scans = sorted(t.scans, key=lambda s: s.id)
         if scans:
-            total_critical_findings += filtro_conteo_abiertos(scans[-1].findings)["critical"]
+            total_critical_findings += ui.filtro_conteo_abiertos(scans[-1].findings)["critical"]
 
     stats = {
         "total_users": total_users,

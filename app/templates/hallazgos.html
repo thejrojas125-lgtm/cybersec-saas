@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% set active_page = 'hallazgos' %}
+{% block title %}Hallazgos · Cybersec SaaS{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Hallazgos</h1>
+    <p>Problemas abiertos en el último escaneo de cada sitio.</p>
+  </div>
+</div>
+
+<nav class="chips" aria-label="Filtrar por severidad">
+  <a href="/hallazgos"{% if not selected %} aria-current="true"{% endif %}>Todos ({{ totals.total }})</a>
+  {% for sev in ('critical', 'high', 'medium', 'low') %}
+  <a href="/hallazgos?severidad={{ sev }}"{% if selected == sev %} aria-current="true"{% endif %}>{{ sev | severidad(2) | capitalize }} ({{ totals[sev] }})</a>
+  {% endfor %}
+</nav>
+
+{% if items %}
+<div class="card flush">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Hallazgos abiertos">
+    <table class="data-table">
+      <thead><tr><th scope="col">Severidad</th><th scope="col">Hallazgo</th><th scope="col">Objetivo</th><th scope="col">Detectado</th></tr></thead>
+      <tbody>
+        {% for i in items %}
+        <tr>
+          <td data-label="Severidad"><span class="sev sev-{{ i.finding.severity }}">{{ i.finding.severity | severidad(1) | capitalize }}</span></td>
+          <th scope="row">{{ i.finding.title }}<span class="sub">{{ i.finding.remediation }}</span></th>
+          <td data-label="Objetivo"><a href="/targets/{{ i.target.id }}/view">{{ i.target.name }}</a></td>
+          <td data-label="Detectado">{{ i.scan.started_at | fecha }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card empty">
+  <h2>{{ 'No hay hallazgos con esta severidad' if selected else 'No hay hallazgos abiertos' }}</h2>
+  <p>{{ 'Prueba con otro filtro.' if selected else 'Cuando un escaneo detecte problemas, aparecerán aquí con la forma de corregirlos.' }}</p>
+</div>
+{% endif %}
+{% endblock %}

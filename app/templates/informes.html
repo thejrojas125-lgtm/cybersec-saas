@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% set active_page = 'informes' %}
+{% block title %}Informes · Cybersec SaaS{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Informes</h1>
+    <p>Descarga en PDF el informe del último escaneo de cada sitio.</p>
+  </div>
+</div>
+{% if targets %}
+<div class="card flush">
+  <div class="table-wrap" tabindex="0" role="region" aria-label="Informes disponibles">
+    <table class="data-table">
+      <thead><tr><th scope="col">Objetivo</th><th scope="col">Último escaneo</th><th scope="col">Hallazgos abiertos</th><th scope="col"><span class="sr-only">Descarga</span></th></tr></thead>
+      <tbody>
+        {% for t in targets %}
+        {% set info = summaries[t.id] %}
+        <tr>
+          <th scope="row">{{ t.name }}<span class="url">{{ t.url }}</span></th>
+          <td data-label="Último escaneo">{% if info.scan %}{{ info.scan.started_at | fecha }}{% else %}Sin escanear{% endif %}</td>
+          <td data-label="Hallazgos abiertos">{{ info.total if info.scan else '—' }}</td>
+          <td data-label="Informe" class="num">
+            {% if info.scan %}<a class="btn" href="/targets/{{ t.id }}/report">Descargar PDF<span class="sr-only"> de {{ t.name }}</span></a>
+            {% else %}<span class="muted">No disponible</span>{% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% else %}
+<div class="card empty">
+  <h2>Todavía no hay informes</h2>
+  <p>Los informes aparecen cuando un objetivo tiene al menos un escaneo.</p>
+</div>
+{% endif %}
+{% endblock %}

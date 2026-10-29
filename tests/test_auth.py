@@ -210,7 +210,7 @@ def test_dashboard_admin_sees_all_targets():
     db.close()
 
     client = client_logged_in("admin@test.local", "admin123")
-    resp = client.get("/")
+    resp = client.get("/objetivos")
     assert resp.status_code == 200
     assert "Target Admin" in resp.text
     assert "Target Cliente" in resp.text
@@ -225,7 +225,7 @@ def test_dashboard_cliente_sees_only_own_targets():
     db.close()
 
     client = client_logged_in("cliente@test.local", "cliente123")
-    resp = client.get("/")
+    resp = client.get("/objetivos")
     assert resp.status_code == 200
     assert "Target Cliente" in resp.text
     assert "Target Admin" not in resp.text
